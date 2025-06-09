@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgroSage – Crop & Fertilizer Advisor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>AgroSage – Crop & Fertilizer Advisor</h1>
+
+    <label for="soil">Choose Soil Type:</label>
+    <select id="soil">
+      <option value="loamy">Loamy</option>
+      <option value="clayey">Clayey</option>
+      <option value="sandy">Sandy</option>
+      <option value="black">Black</option>
+      <option value="alluvial">Alluvial</option>
+    </select>
+
+    <label for="season">Current Season:</label>
+    <select id="season">
+      <option value="summer">Summer</option>
+      <option value="winter">Winter</option>
+      <option value="rainy">Rainy</option>
+    </select>
+
+    <label for="water">Water Availability:</label>
+    <select id="water">
+      <option value="low">Low</option>
+      <option value="medium">Medium</option>
+      <option value="high">High</option>
+    </select>
+
+    <button class="button" onclick="getSuggestion()">Get Suggestion</button>
+    <button class="button" onclick="downloadReport()">Download PDF</button>
+
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    let latestOutput = '';
+
+    async function getSuggestion() {
+      const soil = document.getElementById('soil').value;
+      const season = document.getElementById('season').value;
+      const water = document.getElementById('water').value;
+
+      const res = await fetch('/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soil, season, water, mode: 'web' })  // mode web: with emojis
+      });
+
+      const text = await res.text();
+      document.getElementById('output').textContent = text;
+      latestOutput = text;
+    }
+
+    async function downloadReport() {
+      const soil = document.getElementById('soil').value;
+      const season = document.getElementById('season').value;
+      const water = document.getElementById('water').value;
+
+      const res = await fetch('/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soil, season, water, mode: 'pdf' }) // mode pdf: no emojis
+      });
+
+      const text = await res.text();
+      latestOutput = text;
+
+      generatePDFReport(text);
+    }
+
+    function generatePDFReport(text) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      // Parse lines and key-value pairs
+        const lines = text.trim().split('\n').map(line => line.replace(/[^a-zA-Z0-9\s:.,-]/g, '').trim());
+      const data = lines.map(line => {
+        const parts = line.split(':');
+        if(parts.length >= 2){
+          const key = parts[0].trim();
+          const value = parts.slice(1).join(':').trim();
+          return { key, value };
+        }
+        return null;
+      }).filter(Boolean);
+
+      // Set document properties for better formatting
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(14);
+
+      // Title with better formatting
+      doc.setFont('helvetica', 'bold');
+      doc.text('AgroSage – Crop & Fertilizer Report', 20, 20);
+      doc.setLineWidth(0.5);
+      doc.line(20, 22, 190, 22);
+
+      // Add some space after title
+      let y = 35;
+
+      // Table headers with better formatting
+      doc.setFontSize(12);
+      doc.text('Parameter', 20, y);
+      doc.text('Value', 105, y);
+      
+      // Header underline
+      doc.setLineWidth(0.3);
+      doc.line(20, y + 2, 190, y + 2);
+      
+      // Reset to normal font for table content
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+
+      // Start table content with proper spacing
+      y += 10;
+      const lineHeight = 10;
+      
+      data.forEach(({ key, value }) => {
+        // Wrap text properly with appropriate widths
+        const keyWidth = 80;
+        const valueWidth = 80;
+        
+        const keyLines = doc.splitTextToSize(key, keyWidth);
+        const valueLines = doc.splitTextToSize(value, valueWidth);
+        
+        // Calculate max lines needed for this row
+        const maxLines = Math.max(keyLines.length, valueLines.length);
+        
+        // Store starting y position for this row
+        const rowStartY = y;
+        
+        // Draw text with proper alignment
+        for(let i = 0; i < maxLines; i++) {
+          if (i < keyLines.length) {
+            doc.text(keyLines[i], 20, y);
+          }
+          
+          if (i < valueLines.length) {
+            doc.text(valueLines[i], 105, y);
+          }
+          
+          y += lineHeight;
+        }
+        
+        // Add some padding after the row content
+        y += 2;
+        
+        // Draw line below each row
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.1);
+        doc.line(20, y - 2, 190, y - 2);
+        
+        // Add a bit more space between rows
+        y += 3;
+      });
+
+      // Add footer with date
+      const today = new Date();
+      const dateStr = today.toLocaleDateString();
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated on: ${dateStr}`, 20, 280);
+      
+      doc.save('AgroSage_Report.pdf');
+    }
+  </script>
+</body>
+</html>
